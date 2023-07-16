@@ -19,6 +19,7 @@ func Handler() {
 }
 
 func main() {
-	Handler()
+	// Handler()
 	// lambda.Start(Handler)
+	ProcessGame(2022020289)
 }

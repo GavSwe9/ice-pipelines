@@ -9,8 +9,6 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
-
-	"github.com/go-sql-driver/mysql"
 )
 
 // Response is of type APIGatewayProxyResponse since we're leveraging the
@@ -18,68 +16,6 @@ import (
 //
 // https://serverless.com/framework/docs/providers/aws/events/apigateway/#lambda-proxy-integration
 
-type GameResponse struct {
-	LiveData LiveData `json:"liveData"`
-}
-
-type LiveData struct {
-	Plays Plays `json:"plays"`
-}
-
-type Plays struct {
-	AllPlays []Play `json:"allPlays"`
-}
-
-type Play struct {
-	Players []Players `json:"players"`
-	Result Result `json:"result"`
-	About About `json:"about"`
-	Coordinates Coordinates `json:"coordinates"`
-	Team Team `json:"team"`
-}
-
-type Players struct {
-	Player Player `json:"player"`
-	PlayerType string `json:"playerType"`
-}
-
-type Player struct {
-	PlayerId int `json:"id"`
-}
-
-type Result struct {
-	Event string `json:"event"`
-	EventCode string `json:"eventCode"`
-	EventTypeId string `json:"eventTypeId"`
-	Description string `json:"description"`
-	SecondaryType string `json:"string"`
-}
-
-type About struct {
-	EventIdx int `json:"eventIdx"`
-	EvendId int `json:"eventId"`
-	Period int `json:"period"`
-	PeriodType string `json:"periodType"`
-	OrdinalNum string `json:"ordinalNum"`
-	PeriodTime string `json:"periodTime"`
-	PeriodTimeRemaining string `json:"periodTimeRemaining"`
-	DateTime string `json:"dateTime"`
-	Goals Goals `json:"goals"`
-}
-
-type Coordinates struct {
-	X float32 `json:"x"`
-	Y float32 `json:"y"`
-}
-
-type Team struct {
-	Id float32 `json:"id"`
-}
-
-type Goals struct {
-	Away int `json:"away"`
-	Home int `json:"home"`
-}
 
 var db *sql.DB
 
@@ -101,34 +37,37 @@ func ProcessGame(gamePk int) {
 	var responseObject GameResponse
 	json.Unmarshal(responseData, &responseObject)
 	
-	secrets := getAwsSecrets()
-	
-	cfg := mysql.Config{
-		User:   secrets.Username,
-		Passwd: secrets.Password,
-		Net:    "tcp",
-		Addr:   "farm.cxqsjcdo8n1w.us-east-1.rds.amazonaws.com",
-		DBName: "ICE",
-		AllowNativePasswords: true,
-	}
-	
-	db, err := sql.Open("mysql", cfg.FormatDSN())
-	if err != nil {
-		log.Fatal(err)
-	}
-	
-	tx, err := db.Begin() 
-	println("Start Transation")
+	GetPlayersOnIce(gamePk, responseObject.LiveData.Plays.AllPlays)
 
-	DeleteWithGamePk(tx, "play_by_play", gamePk);
-	DeleteWithGamePk(tx, "play_by_play_contributor", gamePk);
-	InsertRecords(tx, gamePk, responseObject.LiveData.Plays.AllPlays);
+	// secrets := getAwsSecrets()
+	
+	// cfg := mysql.Config{
+	// 	User:   secrets.Username,
+	// 	Passwd: secrets.Password,
+	// 	Net:    "tcp",
+	// 	Addr:   "farm.cxqsjcdo8n1w.us-east-1.rds.amazonaws.com",
+	// 	DBName: "ICE",
+	// 	AllowNativePasswords: true,
+	// }
+	
+	// db, err := sql.Open("mysql", cfg.FormatDSN())
+	// if err != nil {
+	// 	log.Fatal(err)
+	// }
+	
+	// tx, err := db.Begin() 
+	// println("Start Transation")
 
-	err = tx.Commit()
-	if err != nil {
-		log.Fatal(err);
-	}
-	println("Committed Transation")
+	// DeleteWithGamePk(tx, "play_by_play", gamePk);
+	// DeleteWithGamePk(tx, "play_by_play_contributor", gamePk);
+	// InsertRecords(tx, gamePk, responseObject.LiveData.Plays.AllPlays);
+	
+	// err = tx.Commit()
+	// if err != nil {
+		// log.Fatal(err);
+	// }
+	// println("Committed Transation")
+	
 }
 
 func DeleteWithGamePk(tx *sql.Tx, tableName string, gamePk int) {
