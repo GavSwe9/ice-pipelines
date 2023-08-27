@@ -11,6 +11,8 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+
+	"golang.org/x/exp/slices"
 )
 
 type OnIcePlayResult struct {
@@ -18,75 +20,66 @@ type OnIcePlayResult struct {
 	homeLineHash OnIceRecord
 }
 
-type OnIceRecord struct {
-	gamePk int
-	teamId int
-	eventIdx int
-	lineHash string
-	skaterId1 int
-	skaterId2 int
-	skaterId3 int
-	skaterId4 int
-	skaterId5 int
-	skaterId6 int
-}
-
-func GetPlayersOnIce(gamePk int, records []Play) {
+func GetPlayersOnIce(gamePk int, records []Play) []OnIceRecord {
 	outChannel := make(chan OnIceRecord)
 
 	for _, play := range records {
 		timeStamp := formatTimeStamp(play.About.DateTime)
 		go processOnIce(gamePk, play.About.EventIdx, timeStamp, outChannel)
 	}
-	
-	for i:=0;i<len(records)*2;i++ {
-		fmt.Println(<-outChannel)
+
+	var onIceRecordList []OnIceRecord
+
+	for i := 0; i < len(records)*2; i++ {
+		onIceRecordList = append(onIceRecordList, <-outChannel)
+		// fmt.Println(<-outChannel)
 	}
-	
-	close(outChannel)
+
+	return onIceRecordList
 }
 
-
 func processOnIce(gamePk int, eventIdx int, timeStamp string, outChannel chan<- OnIceRecord) {
-	response, err := http.Get(fmt.Sprintf("https://statsapi.web.nhl.com/api/v1/game/%s/feed/live?timecode=%s", strconv.Itoa(gamePk), timeStamp));
+	response, err := http.Get(fmt.Sprintf("https://statsapi.web.nhl.com/api/v1/game/%s/feed/live?timecode=%s", strconv.Itoa(gamePk), timeStamp))
 
 	if err != nil {
 		log.Fatal(err)
 	}
 
 	responseData, err := ioutil.ReadAll(response.Body)
-	
+
 	if err != nil {
 		log.Fatal(err)
 	}
-	
+
 	var responseObject GameResponse
 	json.Unmarshal(responseData, &responseObject)
 
-	awayLineHash := getTeamLineHash(gamePk, eventIdx, responseObject.LiveData.Boxscore.BoxscoreTeams.BoxscoreTeamAway.OnIcePlus)
-	homeLineHash := getTeamLineHash(gamePk, eventIdx, responseObject.LiveData.Boxscore.BoxscoreTeams.BoxscoreTeamHome.OnIcePlus)
-	
-	// outChannel <- OnIcePlayResult{
-	// 	awayLineHash: awayLineHash,
-	// 	homeLineHash: homeLineHash,
-	// }
+	awayLineHash := getTeamLineHash(gamePk, eventIdx, responseObject.LiveData.Boxscore.BoxscoreTeams.BoxscoreTeamAway)
+	homeLineHash := getTeamLineHash(gamePk, eventIdx, responseObject.LiveData.Boxscore.BoxscoreTeams.BoxscoreTeamHome)
 
 	outChannel <- awayLineHash
 	outChannel <- homeLineHash
 }
 
-func getTeamLineHash(gamePk int, eventIdx int, onIcePlus []OnIcePlusPlayer) (OnIceRecord) {
-	onIceRecord := OnIceRecord {
-		gamePk: gamePk,
+func getTeamLineHash(gamePk int, eventIdx int, boxScoreTeam BoxscoreTeam) OnIceRecord {
+	onIcePlus := boxScoreTeam.OnIcePlus
+
+	onIceRecord := OnIceRecord{
+		gamePk:   gamePk,
+		teamId:   boxScoreTeam.Team.Id,
 		eventIdx: eventIdx,
 	}
 
 	playerIdList := make([]int, 0, 6)
-	for _, onIcePlayer := range onIcePlus { 
+	for _, onIcePlayer := range onIcePlus {
+		if slices.Contains(boxScoreTeam.Goalies, onIcePlayer.PlayerId) {
+			onIceRecord.goalieId = onIcePlayer.PlayerId
+			continue
+		}
 		playerIdList = append(playerIdList, onIcePlayer.PlayerId)
 	}
 	sort.Ints(playerIdList)
-	
+
 	for i, playerId := range playerIdList {
 		switch i {
 		case 0:
@@ -116,7 +109,7 @@ func getLineHash(line string) string {
 	return hex.EncodeToString(hash[:])
 }
 
-func formatTimeStamp(timeStamp string) (string) {
+func formatTimeStamp(timeStamp string) string {
 	timeStamp = strings.ReplaceAll(timeStamp, "-", "")
 	timeStamp = strings.ReplaceAll(timeStamp, ":", "")
 	timeStamp = strings.ReplaceAll(timeStamp, "T", "_")
