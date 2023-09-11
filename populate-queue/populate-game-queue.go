@@ -21,8 +21,8 @@ func main() {
 }
 
 func runYear() {
-	dte := time.Date(2021, 8, 1, 0, 0, 0, 0, time.Local)
-	stopDate := time.Date(2022, 7, 1, 0, 0, 0, 0, time.Local)
+	dte := time.Date(2021, 10, 1, 0, 0, 0, 0, time.Local)
+	stopDate := time.Date(2022, 8, 1, 0, 0, 0, 0, time.Local)
 
 	for dte.UnixMilli() < stopDate.UnixMilli() {
 		fmt.Println(dte.Format("2006-01-02"))

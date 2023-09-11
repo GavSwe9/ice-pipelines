@@ -16,12 +16,20 @@ import (
 	"github.com/go-sql-driver/mysql"
 )
 
-// Response is of type APIGatewayProxyResponse since we're leveraging the
-// AWS Lambda Proxy Request functionality (default behavior)
-//
-// https://serverless.com/framework/docs/providers/aws/events/apigateway/#lambda-proxy-integration
+// var db *sql.DB
 
-var db *sql.DB
+var secrets = getAwsSecrets()
+
+var cfg = mysql.Config{
+	User:                 secrets.Username,
+	Passwd:               secrets.Password,
+	Net:                  "tcp",
+	Addr:                 "farm.cxqsjcdo8n1w.us-east-1.rds.amazonaws.com",
+	DBName:               "ICE",
+	AllowNativePasswords: true,
+}
+
+var db, err = sql.Open("mysql", cfg.FormatDSN())
 
 func main() {
 	lambda.Start(Handler)
@@ -33,7 +41,7 @@ func main() {
 
 // 	message := events.SQSMessage{
 // 		MessageId: "mock-message-id",
-// 		Body:      "2022030411",
+// 		Body:      "2022020287",
 // 	}
 
 // 	sqsEvent.Records = []events.SQSMessage{message}
@@ -53,27 +61,11 @@ func Handler(ctx context.Context, sqsEvent events.SQSEvent) {
 
 	fmt.Println(fmt.Sprintf(" *** Processing GamePk %s ***", strconv.Itoa(gamePk)))
 
-	secrets := getAwsSecrets()
-
-	cfg := mysql.Config{
-		User:                 secrets.Username,
-		Passwd:               secrets.Password,
-		Net:                  "tcp",
-		Addr:                 "farm.cxqsjcdo8n1w.us-east-1.rds.amazonaws.com",
-		DBName:               "ICE",
-		AllowNativePasswords: true,
-	}
-
-	db, err := sql.Open("mysql", cfg.FormatDSN())
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	gameAlreadyProcessed := gameHasBeenProcessed(db, gamePk)
-	if gameAlreadyProcessed {
-		fmt.Println(fmt.Sprintf("GamePk %s has already been processed", strconv.Itoa(gamePk)))
-		return
-	}
+	// gameAlreadyProcessed := gameHasBeenProcessed(db, gamePk)
+	// if gameAlreadyProcessed {
+	// 	fmt.Println(fmt.Sprintf("GamePk %s has already been processed", strconv.Itoa(gamePk)))
+	// 	return
+	// }
 
 	UpdateEtlGameStatus(db, gamePk, "IN_PROGRESS")
 
@@ -101,11 +93,16 @@ func Handler(ctx context.Context, sqsEvent events.SQSEvent) {
 	// DeleteWithGamePk(tx, "play_by_play_contributor", gamePk)
 	// DeleteWithGamePk(tx, "play_by_play_on_ice", gamePk)
 
-	DeleteWithGamePk(tx, "games", gamePk)
-	InsertGames(tx, responseObject.GameData)
-	InsertPlayByPlayRecords(tx, gamePk, responseObject.LiveData.Plays.AllPlays)
+	season, err := strconv.Atoi(responseObject.GameData.Game.Season)
+	if err != nil {
+		log.Fatal("Error parsing season string to int")
+	}
+
+	// DeleteWithGamePk(tx, "games", gamePk)
+	// InsertGames(tx, responseObject.GameData)
+	// InsertPlayByPlayRecords(tx, gamePk, responseObject.LiveData.Plays.AllPlays)
 	InsertOnIceRecords(tx, onIceRecordList)
-	InsertSkaterLineRecords(db, onIceRecordList)
+	InsertSkaterLineRecords(db, onIceRecordList, season)
 
 	UpdateEtlGameStatus(db, gamePk, "COMPLETE")
 
@@ -242,13 +239,15 @@ func InsertOnIceRecords(tx *sql.Tx, records []OnIceRecord) {
 	println(fmt.Sprintf("Inserted %s records into play_by_play_on_ice for gamePk %s", strconv.Itoa(int(rows_affected)), strconv.Itoa(records[0].gamePk)))
 }
 
-func InsertSkaterLineRecords(db *sql.DB, records []OnIceRecord) {
+func InsertSkaterLineRecords(db *sql.DB, records []OnIceRecord, season int) {
 	stakerLineValueStrings := make([]string, 0, len(records))
 	stakerLineValueArgs := make([]interface{}, 0, len(records)*17)
 
 	for _, oir := range records {
-		stakerLineValueStrings = append(stakerLineValueStrings, "(?, ?, ?, ?, ?, ?, ?)")
+		stakerLineValueStrings = append(stakerLineValueStrings, "(?, ?, ?, ?, ?, ?, ?, ?, ?)")
 		stakerLineValueArgs = append(stakerLineValueArgs,
+			season,
+			oir.teamId,
 			oir.lineHash,
 			oir.skaterId1,
 			oir.skaterId2,
@@ -259,16 +258,16 @@ func InsertSkaterLineRecords(db *sql.DB, records []OnIceRecord) {
 		)
 	}
 
-	stmt := fmt.Sprintf("INSERT INTO skater_lines VALUES %s ON DUPLICATE KEY UPDATE line_hash=line_hash", strings.Join(stakerLineValueStrings, ","))
+	stmt := fmt.Sprintf("INSERT INTO team_season_skater_lines VALUES %s ON DUPLICATE KEY UPDATE line_hash=line_hash", strings.Join(stakerLineValueStrings, ","))
 	result, err := db.Exec(stmt, stakerLineValueArgs...)
 
 	if err != nil {
-		fmt.Println("Error inserting staket line record")
+		fmt.Println("Error inserting staker line record")
 		log.Fatal(err)
 	}
 
 	rows_affected, err := result.RowsAffected()
-	println(fmt.Sprintf("Inserted %s records into skater_lines for gamePk %s", strconv.Itoa(int(rows_affected)), strconv.Itoa(records[0].gamePk)))
+	println(fmt.Sprintf("Inserted %s records into team_season_skater_lines for gamePk %s", strconv.Itoa(int(rows_affected)), strconv.Itoa(records[0].gamePk)))
 }
 
 func UpdateEtlGameStatus(db *sql.DB, gamePk int, status string) {
