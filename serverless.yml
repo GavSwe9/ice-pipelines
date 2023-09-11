@@ -86,7 +86,7 @@ functions:
               - Arn
           batchSize: 1
     timeout: 500
-    reservedConcurrency: 60
+    reservedConcurrency: 40
      
   # processDayGames:
   #   handler: bin/schedule-games
