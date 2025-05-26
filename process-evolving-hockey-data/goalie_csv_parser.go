@@ -33,8 +33,8 @@ func parseGoalieCSV(filepath string) ([]PlayerStats, error) {
 
 	var players []PlayerStats
 	for i, record := range records {
-		if len(record) < 22 { // Expected number of columns for goalies (reduced by 1 due to removed age)
-			return nil, fmt.Errorf("invalid record at line %d: expected 22 columns, got %d", i+2, len(record))
+		if len(record) < 23 { // Expected number of columns for goalies (back to original)
+			return nil, fmt.Errorf("invalid record at line %d: expected 23 columns, got %d", i+2, len(record))
 		}
 
 		player, err := parseGoalieRecord(record)
@@ -69,8 +69,8 @@ func parseGoalieRecord(record []string) (PlayerStats, error) {
 		return player, fmt.Errorf("failed to parse birthday '%s': %w", birthdayStr, err)
 	}
 
-	// Parse draft year (nullable)
-	draftYrStr := strings.Trim(record[8], `"`)
+	// Parse draft year (nullable) - Skip Age column at index 8
+	draftYrStr := strings.Trim(record[9], `"`)
 	if draftYrStr == "NA" || draftYrStr == "" {
 		player.DraftYear = sql.NullInt32{Valid: false}
 	} else {
@@ -82,7 +82,7 @@ func parseGoalieRecord(record []string) (PlayerStats, error) {
 	}
 
 	// Parse draft round (nullable)
-	draftRdStr := strings.Trim(record[9], `"`)
+	draftRdStr := strings.Trim(record[10], `"`)
 	if draftRdStr == "NA" || draftRdStr == "" {
 		player.DraftRound = sql.NullInt32{Valid: false}
 	} else {
@@ -94,7 +94,7 @@ func parseGoalieRecord(record []string) (PlayerStats, error) {
 	}
 
 	// Parse draft overall (nullable)
-	draftOvStr := strings.Trim(record[10], `"`)
+	draftOvStr := strings.Trim(record[11], `"`)
 	if draftOvStr == "NA" || draftOvStr == "" {
 		player.OverallPick = sql.NullInt32{Valid: false}
 	} else {
@@ -106,19 +106,24 @@ func parseGoalieRecord(record []string) (PlayerStats, error) {
 	}
 
 	// Parse GP
-	player.GP, err = strconv.Atoi(strings.Trim(record[11], `"`))
-	if err != nil {
-		return player, fmt.Errorf("failed to parse GP: %w", err)
+	gpStr := strings.Trim(record[12], `"`)
+	if gpStr == "NA" || gpStr == "" {
+		player.GP = 0 // Default to 0 for missing GP values
+	} else {
+		player.GP, err = strconv.Atoi(gpStr)
+		if err != nil {
+			return player, fmt.Errorf("failed to parse GP: %w", err)
+		}
 	}
 
-	// Parse TOI_EV (column 12)
-	toiEV, err := strconv.ParseFloat(strings.Trim(record[12], `"`), 64)
+	// Parse TOI_EV (column 14)
+	toiEV, err := strconv.ParseFloat(strings.Trim(record[13], `"`), 64)
 	if err != nil {
 		return player, fmt.Errorf("failed to parse TOI_EV: %w", err)
 	}
 
-	// Parse TOI_SH (column 13)
-	toiSH, err := strconv.ParseFloat(strings.Trim(record[13], `"`), 64)
+	// Parse TOI_SH (column 15)
+	toiSH, err := strconv.ParseFloat(strings.Trim(record[14], `"`), 64)
 	if err != nil {
 		return player, fmt.Errorf("failed to parse TOI_SH: %w", err)
 	}
@@ -126,20 +131,20 @@ func parseGoalieRecord(record []string) (PlayerStats, error) {
 	// Sum TOI_EV + TOI_SH for total TOI
 	player.ToiAll = toiEV + toiSH
 
-	// Parse GAR (column 19 - index 18)
-	player.GAR, err = strconv.ParseFloat(strings.Trim(record[18], `"`), 64)
+	// Parse GAR (column 21 - index 20)
+	player.GAR, err = strconv.ParseFloat(strings.Trim(record[19], `"`), 64)
 	if err != nil {
 		return player, fmt.Errorf("failed to parse GAR: %w", err)
 	}
 
-	// Parse WAR (column 20 - index 19)
-	player.WAR, err = strconv.ParseFloat(strings.Trim(record[19], `"`), 64)
+	// Parse WAR (column 22 - index 21)
+	player.WAR, err = strconv.ParseFloat(strings.Trim(record[20], `"`), 64)
 	if err != nil {
 		return player, fmt.Errorf("failed to parse WAR: %w", err)
 	}
 
-	// Parse SPAR (column 21 - index 20)
-	player.SPAR, err = strconv.ParseFloat(strings.Trim(record[20], `"`), 64)
+	// Parse SPAR (column 23 - index 22)
+	player.SPAR, err = strconv.ParseFloat(strings.Trim(record[21], `"`), 64)
 	if err != nil {
 		return player, fmt.Errorf("failed to parse SPAR: %w", err)
 	}
