@@ -13,23 +13,10 @@ import (
 
 	"github.com/aws/aws-lambda-go/events"
 	"github.com/aws/aws-lambda-go/lambda"
-	"github.com/go-sql-driver/mysql"
+	"github.com/gavswe19/ice-pipelines/database"
 )
 
 // var db *sql.DB
-
-var secrets = getAwsSecrets()
-
-var cfg = mysql.Config{
-	User:                 secrets.Username,
-	Passwd:               secrets.Password,
-	Net:                  "tcp",
-	Addr:                 "farm.cxqsjcdo8n1w.us-east-1.rds.amazonaws.com",
-	DBName:               "ICE",
-	AllowNativePasswords: true,
-}
-
-var db, err = sql.Open("mysql", cfg.FormatDSN())
 
 func main() {
 	lambda.Start(Handler)
@@ -61,11 +48,12 @@ func Handler(ctx context.Context, sqsEvent events.SQSEvent) {
 
 	fmt.Println(fmt.Sprintf(" *** Processing GamePk %s ***", strconv.Itoa(gamePk)))
 
-	// gameAlreadyProcessed := gameHasBeenProcessed(db, gamePk)
-	// if gameAlreadyProcessed {
-	// 	fmt.Println(fmt.Sprintf("GamePk %s has already been processed", strconv.Itoa(gamePk)))
-	// 	return
-	// }
+	db := database.GetDatabase()
+	gameAlreadyProcessed := gameHasBeenProcessed(db, gamePk)
+	if gameAlreadyProcessed {
+		fmt.Println(fmt.Sprintf("GamePk %s has already been processed", strconv.Itoa(gamePk)))
+		return
+	}
 
 	UpdateEtlGameStatus(db, gamePk, "IN_PROGRESS")
 
@@ -98,9 +86,9 @@ func Handler(ctx context.Context, sqsEvent events.SQSEvent) {
 		log.Fatal("Error parsing season string to int")
 	}
 
-	// DeleteWithGamePk(tx, "games", gamePk)
-	// InsertGames(tx, responseObject.GameData)
-	// InsertPlayByPlayRecords(tx, gamePk, responseObject.LiveData.Plays.AllPlays)
+	DeleteWithGamePk(tx, "games", gamePk)
+	InsertGames(tx, responseObject.GameData)
+	InsertPlayByPlayRecords(tx, gamePk, responseObject.LiveData.Plays.AllPlays)
 	InsertOnIceRecords(tx, onIceRecordList)
 	InsertSkaterLineRecords(db, onIceRecordList, season)
 

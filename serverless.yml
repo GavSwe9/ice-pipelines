@@ -22,7 +22,8 @@ frameworkVersion: '3'
 
 provider:
   name: aws
-  runtime: go1.x
+  runtime: provided.al2023
+  architecture: arm64 
 
   iam:
     role:
@@ -59,25 +60,13 @@ provider:
 #    variable1: value1
 
 package:
-  patterns:
-    - '!./**'
-    - ./bin/**
+  individually: true
 
 functions:
-  hello:
-    handler: bin/hello
-    events:
-      - httpApi:
-          path: /hello
-          method: get
-  world:
-    handler: bin/world
-    events:
-      - httpApi:
-          path: /world
-          method: get
   processGame:
-    handler: bin/process-game
+    handler: bootstrap
+    package:
+      artifact: build/lambda/process-game.zip
     events:
       - sqs:
           arn:
@@ -85,7 +74,33 @@ functions:
               - IceGameQueue
               - Arn
           batchSize: 1
-    timeout: 500
+    timeout: 60
+    reservedConcurrency: 40
+  processPlayerSeasonTotals:
+    handler: bootstrap
+    package:
+      artifact: build/lambda/process-player-season-totals.zip
+    events:
+      - sqs:
+          arn:
+            Fn::GetAtt:
+              - IcePlayerSeasonTotalsQueue
+              - Arn
+          batchSize: 1
+    timeout: 60
+    reservedConcurrency: 40
+  processPlayer:
+    handler: bootstrap
+    package:
+      artifact: build/lambda/process-player.zip
+    events:
+      - sqs:
+          arn:
+            Fn::GetAtt:
+              - PlayerQueue
+              - Arn
+          batchSize: 1
+    timeout: 60
     reservedConcurrency: 40
      
   # processDayGames:
@@ -99,4 +114,14 @@ resources:
       Type: "AWS::SQS::Queue"
       Properties:
         QueueName: "ice-game-queue"
-        VisibilityTimeout: 60
+        VisibilityTimeout: 70
+    IcePlayerSeasonTotalsQueue:
+      Type: "AWS::SQS::Queue"
+      Properties:
+        QueueName: "ice-player-season-totals-queue"
+        VisibilityTimeout: 70
+    PlayerQueue:
+      Type: "AWS::SQS::Queue"
+      Properties:
+        QueueName: "player-queue"
+        VisibilityTimeout: 70

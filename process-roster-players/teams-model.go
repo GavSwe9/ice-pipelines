@@ -1,7 +1,7 @@
 package main
 
 type TeamsResponse struct {
-	Teams []Team `json:"teams"`
+	Teams []Team `json:"standings"`
 }
 
 type Team struct {

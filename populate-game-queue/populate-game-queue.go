@@ -8,16 +8,17 @@ import (
 	"time"
 
 	"github.com/aws/aws-lambda-go/events"
+	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/sqs"
-	"github.com/aws/aws-sdk-go/aws"
 )
 
 type GatewayResponse events.APIGatewayProxyResponse
 
 func main() {
-	// PopulateQueue()
-	runYear()
+	yesterday := time.Now().AddDate(0, 0, -1)
+	PopulateGameQueue(yesterday)
+	// runYear()
 }
 
 func runYear() {
@@ -26,12 +27,12 @@ func runYear() {
 
 	for dte.UnixMilli() < stopDate.UnixMilli() {
 		fmt.Println(dte.Format("2006-01-02"))
-		PopulateQueue(dte)
+		PopulateGameQueue(dte)
 		dte = dte.AddDate(0, 0, 1)
 	}
 }
 
-func PopulateQueue(dte time.Time) {
+func PopulateGameQueue(dte time.Time) {
 	gamePkList := GetScheduleGames(dte)
 	fmt.Println(gamePkList)
 

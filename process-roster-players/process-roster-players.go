@@ -14,7 +14,7 @@ import (
 )
 
 func processTeamRoster(tx *sql.Tx, season string) TeamsResponse {
-	response, err := http.Get(fmt.Sprintf("https://statsapi.web.nhl.com/api/v1/teams?season=%s", season))
+	response, err := http.Get(fmt.Sprintf("https://api-web.nhle.com/v1/standings/%s-01-01", season))
 
 	if err != nil {
 		log.Fatal(err)
@@ -39,8 +39,8 @@ func processTeamRoster(tx *sql.Tx, season string) TeamsResponse {
 	return teamsResponse
 }
 
-func getRosterPlayers(teamId int, season string) []PlayerObj {
-	response, err := http.Get(fmt.Sprintf("https://statsapi.web.nhl.com/api/v1/teams/%s/roster?season=%s", strconv.Itoa(teamId), season))
+func getRosterPlayers(teamAbbrev string, season string) []PlayerObj {
+	response, err := http.Get(fmt.Sprintf("https://api-web.nhle.com/v1/roster/%s/%d", teamAbbrev, season))
 
 	if err != nil {
 		log.Fatal(err)

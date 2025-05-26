@@ -3,6 +3,8 @@
 
 # golang output binary directory
 bin
+build/
+*.zip
 
 # Binaries for programs and plugins
 *.exe

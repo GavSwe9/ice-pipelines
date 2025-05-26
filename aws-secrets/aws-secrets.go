@@ -1,4 +1,4 @@
-package main
+package aws_secrets
 
 // Use this code snippet in your app.
 // If you need more information about configurations or implementing the sample code, visit the AWS docs:
@@ -17,10 +17,10 @@ import (
 type Secrets struct {
 	Username string `json:"username"`
 	Password string `json:"password"`
-	Host string `json:"host"`
+	Host     string `json:"host"`
 }
 
-func getAwsSecrets() (secrets Secrets){
+func GetAwsSecrets() (secrets Secrets) {
 	secretName := "farm/mysql"
 	region := "us-east-1"
 
@@ -46,8 +46,8 @@ func getAwsSecrets() (secrets Secrets){
 
 	// Decrypts secret using the associated KMS key.
 	secretString := *result.SecretString
-	
-	json.Unmarshal([]byte(secretString), &secrets);
 
-	return;
+	json.Unmarshal([]byte(secretString), &secrets)
+
+	return
 }
