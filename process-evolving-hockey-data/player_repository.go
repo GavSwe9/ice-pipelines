@@ -3,6 +3,7 @@ package main
 import (
 	"database/sql"
 	"fmt"
+	"strings"
 
 	"github.com/gavswe19/ice-pipelines/database"
 )
@@ -19,10 +20,10 @@ func NewPlayerRepository() (*PlayerRepository, error) {
 	return &PlayerRepository{db: db}, nil
 }
 
-// CreateTable creates the evolving_hockey_player_seasons table if it doesn't exist
+// CreateTable creates the evolving_hockey_player_seasons_gar table if it doesn't exist
 func (r *PlayerRepository) CreateTable() error {
 	query := `
-	CREATE TABLE IF NOT EXISTS evolving_hockey_player_seasons (
+	CREATE TABLE IF NOT EXISTS evolving_hockey_player_seasons_gar (
 		nhl_id VARCHAR(255) NOT NULL,
 		season VARCHAR(10) NOT NULL,
 		full_name VARCHAR(255) NOT NULL,
@@ -53,8 +54,32 @@ func (r *PlayerRepository) CreateTable() error {
 	return nil
 }
 
-// InsertPlayerStats inserts a slice of PlayerStats into the database using a transaction
+// InsertPlayerStats inserts a slice of PlayerStats into the database using batch inserts
 func (r *PlayerRepository) InsertPlayerStats(players []PlayerStats) error {
+	if len(players) == 0 {
+		return nil
+	}
+
+	const batchSize = 1000 // Insert 1000 records at a time
+
+	// Process in batches
+	for i := 0; i < len(players); i += batchSize {
+		end := i + batchSize
+		if end > len(players) {
+			end = len(players)
+		}
+
+		batch := players[i:end]
+		if err := r.insertBatch(batch); err != nil {
+			return fmt.Errorf("failed to insert batch starting at index %d: %w", i, err)
+		}
+	}
+
+	return nil
+}
+
+// insertBatch inserts a batch of players using a single query
+func (r *PlayerRepository) insertBatch(players []PlayerStats) error {
 	if len(players) == 0 {
 		return nil
 	}
@@ -66,38 +91,13 @@ func (r *PlayerRepository) InsertPlayerStats(players []PlayerStats) error {
 	}
 	defer tx.Rollback()
 
-	// Prepare the insert statement
-	query := `
-	INSERT INTO evolving_hockey_player_seasons 
-	(nhl_id, season, full_name, eh_id, team, position, shoots_catches, birthday, 
-	 draft_year, draft_round, overall_pick, gp, toi_all, gar, war, spar)
-	VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-	ON DUPLICATE KEY UPDATE
-	full_name = VALUES(full_name),
-	eh_id = VALUES(eh_id),
-	team = VALUES(team),
-	position = VALUES(position),
-	shoots_catches = VALUES(shoots_catches),
-	birthday = VALUES(birthday),
-	draft_year = VALUES(draft_year),
-	draft_round = VALUES(draft_round),
-	overall_pick = VALUES(overall_pick),
-	gp = VALUES(gp),
-	toi_all = VALUES(toi_all),
-	gar = VALUES(gar),
-	war = VALUES(war),
-	spar = VALUES(spar),
-	updated_at = CURRENT_TIMESTAMP`
+	// Build the batch insert query
+	valueStrings := make([]string, 0, len(players))
+	valueArgs := make([]interface{}, 0, len(players)*16) // 16 columns per player
 
-	stmt, err := tx.Prepare(query)
-	if err != nil {
-		return fmt.Errorf("failed to prepare statement: %w", err)
-	}
-	defer stmt.Close()
-
-	// Insert each player record
-	for i, player := range players {
-		_, err := stmt.Exec(
+	for _, player := range players {
+		valueStrings = append(valueStrings, "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
+		valueArgs = append(valueArgs,
 			player.NhlId,
 			player.Season,
 			player.FullName,
@@ -115,9 +115,34 @@ func (r *PlayerRepository) InsertPlayerStats(players []PlayerStats) error {
 			player.WAR,
 			player.SPAR,
 		)
-		if err != nil {
-			return fmt.Errorf("failed to insert player record %d (%s): %w", i+1, player.FullName, err)
-		}
+	}
+
+	query := fmt.Sprintf(`
+	INSERT INTO evolving_hockey_player_seasons_gar 
+	(nhl_id, season, full_name, eh_id, team, position, shoots_catches, birthday, 
+	 draft_year, draft_round, overall_pick, gp, toi_all, gar, war, spar)
+	VALUES %s
+	ON DUPLICATE KEY UPDATE
+	full_name = VALUES(full_name),
+	eh_id = VALUES(eh_id),
+	team = VALUES(team),
+	position = VALUES(position),
+	shoots_catches = VALUES(shoots_catches),
+	birthday = VALUES(birthday),
+	draft_year = VALUES(draft_year),
+	draft_round = VALUES(draft_round),
+	overall_pick = VALUES(overall_pick),
+	gp = VALUES(gp),
+	toi_all = VALUES(toi_all),
+	gar = VALUES(gar),
+	war = VALUES(war),
+	spar = VALUES(spar),
+	updated_at = CURRENT_TIMESTAMP`, strings.Join(valueStrings, ","))
+
+	// Execute the batch insert
+	_, err = tx.Exec(query, valueArgs...)
+	if err != nil {
+		return fmt.Errorf("failed to execute batch insert: %w", err)
 	}
 
 	// Commit the transaction
